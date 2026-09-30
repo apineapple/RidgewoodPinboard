@@ -1,38 +1,73 @@
-.App {
-  text-align: center;
+.scroll-area {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.scroll-area::-webkit-scrollbar {
+  display: none;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
+
+body {
+  background-color: #1ac3af;
+  background-image: url("https://upload.wikimedia.org/wikipedia/commons/8/82/Mt_Shasta.JPG?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original");
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  background-attachment: fixed;
+  image-rendering: pixelated;
+}
+
+@media (max-width: 768px) {
+  .board-shell {
+    width: 85vw !important;
+    margin-left: 3vw !important;
+    height: 50vh !important;
+    margin-top: 0 !important;
+  }
+
+  .board-scroll-area {
+    touch-action: pan-x pan-y;
+  }
+
+  .image-modal-content {
+    max-width: 92vw;
+    max-height: 80vh;
+  }
+
+  .image-modal-content img {
+    max-height: 80vh;
   }
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+.image-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  z-index: 1000;
 }
 
-.App-link {
-  color: #61dafb;
+.image-modal-content {
+  position: relative;
+  background-image: linear-gradient(rgba(114, 17, 211, 0.1), rgba(222, 24, 229, 0.1)), url(./images/cork.png);
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  background-blend-mode: multiply;
+  padding: 15px;
+  border-radius: 2px;
+  margin-top: -5vh;
+  max-height: 75vh;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  z-index: 999;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.image-modal-content img {
+  display: block;
+  max-height: 75vh;
+  border-radius: 2px;
+  z-index: 1001;
 }
