@@ -11,44 +11,19 @@ const ZOOM_LEVELS = [10,20,25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 
 const PIN_WIDTH = 120;
 const PIN_HEIGHT = Math.round(PIN_WIDTH * (150 / 120));
 
-const formatDate = (date) => String(date.getMonth() + 1).padStart(2, '0') + `/${String(date.getDate()).padStart(2, '0')}/${date.getFullYear()}`;
-
-const dateFromToday = (days) => {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() + days);
-  return formatDate(date);
-};
-
-
 const randomRotation = () => {
   const magnitude = Math.random() < 0.75 ? 1 + Math.floor(Math.random() * 5) : 6 + Math.floor(Math.random() * 10);
   return (Math.random() < 0.5 ? -1 : 1) * magnitude;
 };
 
-
-const EXPIRATION_DAYS = [20, 16, 12, 7, 3];
 const IMAGE_DATA = [
-  {src: flyerflyer, expirationDate: dateFromToday(20)},
-  ...Array.from({ length: imageurls.length }, (_, i) => ({
-    src: imageurls[i % imageurls.length],
-    expirationDate: dateFromToday(EXPIRATION_DAYS[i % EXPIRATION_DAYS.length])
-  })),
+  { src: flyerflyer, index: 0 },
+  ...imageurls.map((src, idx) => ({ src, index: idx + 1 })),
 ];
-
-const expirationTime = (expirationDate) => {
-  const [month, day, year] = expirationDate.split('/').map(Number);
-  return new Date(year, month - 1, day).getTime();
-};
-
-const sortByExpirationNewestFirst = (images) => [...images].sort(
-  (a, b) => expirationTime(b.expirationDate) - expirationTime(a.expirationDate),
-);
-
 
 const placeImages = (images) => {
 
-  const boardImages = sortByExpirationNewestFirst(images.filter((image) => (image.index ?? 0) > 0));
+  const boardImages = images.filter((image) => (image.index ?? 0) > 0);
   const generatePositions = (n) => {
     if (n <= 0) return [];
     const positions = [];
@@ -118,7 +93,7 @@ function Board() {
   const [, setCoords] = useState({ x: 0, y: 0 });
   const [tileSize, setTileSize] = useState(INITIAL_TILE_SIZE);
   const tileSizeRef = useRef(INITIAL_TILE_SIZE);
-  const [images] = useState(() => placeImages(
+  const [images, setImages] = useState(() => placeImages(
     IMAGE_DATA.map((image, index) => ({
       ...image,
       index,
@@ -127,57 +102,129 @@ function Board() {
   ));
   const firstPoster = IMAGE_DATA[0];
   const FIRST_POSTER_KEY = 0;
-  const fileInputRef = useRef(null);
   const pinchRef = useRef({ active: false, startDistance: 0, startTileSize: INITIAL_TILE_SIZE });
   const [hoveredId, setHoveredId] = useState(null);
   const [modalImage, setModalImage] = useState(null);
-  const [pendingUpload, setPendingUpload] = useState(null);
-  const positionedImages = sortByExpirationNewestFirst(images.filter((image) => (image.index ?? 0) > 0));
+  const positionedImages = images.filter((image) => (image.index ?? 0) > 0);
   const isFirstPosterModal = modalImage === firstPoster;
+  const CLOUDINARY_CLOUD_NAME = 'vsm8agqa';
+  const CLOUDINARY_UPLOAD_PRESET = 'pinboard_upload';
+
+  const openCloudinaryUpload = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    const loadUploadWidget = () => {
+      const script = document.createElement('script');
+      script.src = 'https://upload-widget.cloudinary.com/global/all.js';
+      script.async = true;
+      script.onload = () => {
+        if (window.cloudinary && typeof window.cloudinary.createUploadWidget === 'function') {
+          const widget = window.cloudinary.createUploadWidget({
+            cloudName: CLOUDINARY_CLOUD_NAME,
+            uploadPreset: CLOUDINARY_UPLOAD_PRESET,
+            sources: ['local'],
+            multiple: false,
+            clientAllowedFormats: ['jpg', 'jpeg', 'png'],
+            maxImageFileSize: 10000000,
+            singleUploadAutoClose: true,
+          }, (error, result) => {
+            if (!error && result && result.event === 'success') {
+              const url = result.info?.secure_url;
+              if (!url) return;
+
+              const img = new Image();
+              img.onload = () => {
+                const scale = 0.2;
+                const w = Math.max(16, Math.round(img.width * scale));
+                const h = Math.max(16, Math.round(img.height * scale));
+                const thumbnailScale = Math.min(1, PIN_WIDTH / w, PIN_HEIGHT / h);
+
+                setImages((prev) => placeImages([...prev, {
+                  src: url,
+                  baseWidth: w * thumbnailScale,
+                  baseHeight: h * thumbnailScale,
+                  rotation: null,
+                  baseX: null,
+                  baseY: null,
+                  noiseX: null,
+                  noiseY: null,
+                  x: null,
+                  y: null,
+                  zIndex: null,
+                  index: prev.length,
+                }]));
+              };
+              img.src = url;
+            }
+
+            if (error) {
+              console.error('Cloudinary upload failed', error);
+            }
+          });
+
+          widget.open();
+          return;
+        }
+        console.error('Cloudinary upload widget failed to load.');
+      };
+      document.body.appendChild(script);
+    };
+
+    if (window.cloudinary && typeof window.cloudinary.createUploadWidget === 'function') {
+      const widget = window.cloudinary.createUploadWidget({
+        cloudName: CLOUDINARY_CLOUD_NAME,
+        uploadPreset: CLOUDINARY_UPLOAD_PRESET,
+        sources: ['local'],
+        multiple: false,
+        clientAllowedFormats: ['jpg', 'jpeg', 'png'],
+        maxImageFileSize: 10000000,
+        singleUploadAutoClose: true,
+      }, (error, result) => {
+        if (!error && result && result.event === 'success') {
+          const url = result.info?.secure_url;
+          if (!url) return;
+
+          const img = new Image();
+          img.onload = () => {
+            const scale = 0.2;
+            const w = Math.max(16, Math.round(img.width * scale));
+            const h = Math.max(16, Math.round(img.height * scale));
+            const thumbnailScale = Math.min(1, PIN_WIDTH / w, PIN_HEIGHT / h);
+
+            setImages((prev) => placeImages([...prev, {
+              src: url,
+              baseWidth: w * thumbnailScale,
+              baseHeight: h * thumbnailScale,
+              rotation: null,
+              baseX: null,
+              baseY: null,
+              noiseX: null,
+              noiseY: null,
+              x: null,
+              y: null,
+              zIndex: null,
+              index: prev.length,
+            }]));
+          };
+          img.src = url;
+        }
+
+        if (error) {
+          // eslint-disable-next-line no-console
+          console.error('Cloudinary upload failed', error);
+        }
+      });
+      widget.open();
+      return;
+    }
+
+    loadUploadWidget();
+  }, []);
 
   const getViewportPosition = useCallback((el, scale = tileSizeRef.current / INITIAL_TILE_SIZE) => ({
     x: (el.scrollLeft + el.clientWidth / 2 - centerRef.current.left) / scale,
     y: (el.scrollTop + el.clientHeight / 2 - centerRef.current.top) / scale,
   }), []);
-
-  const handleFileSelection = useCallback((event) => {
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
-
-    const isImage = /^image\/(png|jpeg)$/i.test(file.type) || /\.(png|jpe?g)$/i.test(file.name);
-    if (!isImage) {
-      event.target.value = '';
-      return;
-    }
-
-    setPendingUpload({ file, fileName: file.name });
-    event.target.value = '';
-  }, []);
-
-  const handleUploadConfirm = useCallback(async () => {
-    if (!pendingUpload) return;
-
-    try {
-      const response = await fetch('http://localhost:3001/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: pendingUpload.fileName,
-          recipient: 'obiwonton123@gmail.com',
-          action: 'upload-confirmed',
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to upload file');
-      }
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Upload failed', error);
-    } finally {
-      setPendingUpload(null);
-    }
-  }, [pendingUpload]);
 
   const getViewportCoords = useCallback((el) => {
     const { x, y } = getViewportPosition(el);
@@ -500,24 +547,6 @@ function Board() {
         </div>
       
       </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".png,.jpg,.jpeg,image/png,image/jpeg"
-        style={{ display: 'none' }}
-        onChange={handleFileSelection}
-      />
-      {pendingUpload && (
-        <div className="image-modal-overlay" onClick={() => setPendingUpload(null)}>
-          <div className="image-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '360px', textAlign: 'center',zIndex: '10000' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '18px', color: '#2b2b2b' }}>Upload "{pendingUpload.fileName}"?</h3>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
-              <button type="button" onClick={() => setPendingUpload(null)} style={{ padding: '10px 18px', borderRadius: '999px', border: '1px solid #d0d0d0', background: '#fff', cursor: 'pointer' }}>No</button>
-              <button type="button" onClick={handleUploadConfirm} style={{ padding: '10px 18px', borderRadius: '999px', border: 'none', background: '#7b61ff', color: '#fff', cursor: 'pointer' }}>Yes</button>
-            </div>
-          </div>
-        </div>
-      )}
       {modalImage && (
         <div className="image-modal-overlay" onClick={() => setModalImage(null)}>
           <div className="image-modal-content" onClick={(e) => e.stopPropagation()}>
@@ -538,7 +567,7 @@ function Board() {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  fileInputRef.current?.click();
+                  openCloudinaryUpload();
                 }}
                 style={{
                   position: 'absolute',
