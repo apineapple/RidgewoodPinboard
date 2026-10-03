@@ -115,10 +115,10 @@ function App() {
 function Board() {
   const scrollRef = useRef(null);
   const centerRef = useRef({ left: 0, top: 0 });
-  const [coords, setCoords] = useState({ x: 0, y: 0 });
+  const [, setCoords] = useState({ x: 0, y: 0 });
   const [tileSize, setTileSize] = useState(INITIAL_TILE_SIZE);
   const tileSizeRef = useRef(INITIAL_TILE_SIZE);
-  const [images, setImages] = useState(() => placeImages(
+  const [images] = useState(() => placeImages(
     IMAGE_DATA.map((image, index) => ({
       ...image,
       index,
@@ -131,6 +131,7 @@ function Board() {
   const pinchRef = useRef({ active: false, startDistance: 0, startTileSize: INITIAL_TILE_SIZE });
   const [hoveredId, setHoveredId] = useState(null);
   const [modalImage, setModalImage] = useState(null);
+  const [pendingUpload, setPendingUpload] = useState(null);
   const positionedImages = sortByExpirationNewestFirst(images.filter((image) => (image.index ?? 0) > 0));
   const isFirstPosterModal = modalImage === firstPoster;
 
@@ -138,6 +139,45 @@ function Board() {
     x: (el.scrollLeft + el.clientWidth / 2 - centerRef.current.left) / scale,
     y: (el.scrollTop + el.clientHeight / 2 - centerRef.current.top) / scale,
   }), []);
+
+  const handleFileSelection = useCallback((event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const isImage = /^image\/(png|jpeg)$/i.test(file.type) || /\.(png|jpe?g)$/i.test(file.name);
+    if (!isImage) {
+      event.target.value = '';
+      return;
+    }
+
+    setPendingUpload({ file, fileName: file.name });
+    event.target.value = '';
+  }, []);
+
+  const handleUploadConfirm = useCallback(async () => {
+    if (!pendingUpload) return;
+
+    try {
+      const response = await fetch('http://localhost:3001/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: pendingUpload.fileName,
+          recipient: 'obiwonton123@gmail.com',
+          action: 'upload-confirmed',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to upload file');
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Upload failed', error);
+    } finally {
+      setPendingUpload(null);
+    }
+  }, [pendingUpload]);
 
   const getViewportCoords = useCallback((el) => {
     const { x, y } = getViewportPosition(el);
@@ -460,6 +500,24 @@ function Board() {
         </div>
       
       </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+        style={{ display: 'none' }}
+        onChange={handleFileSelection}
+      />
+      {pendingUpload && (
+        <div className="image-modal-overlay" onClick={() => setPendingUpload(null)}>
+          <div className="image-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '360px', textAlign: 'center',zIndex: '10000' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '18px', color: '#2b2b2b' }}>Upload "{pendingUpload.fileName}"?</h3>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+              <button type="button" onClick={() => setPendingUpload(null)} style={{ padding: '10px 18px', borderRadius: '999px', border: '1px solid #d0d0d0', background: '#fff', cursor: 'pointer' }}>No</button>
+              <button type="button" onClick={handleUploadConfirm} style={{ padding: '10px 18px', borderRadius: '999px', border: 'none', background: '#7b61ff', color: '#fff', cursor: 'pointer' }}>Yes</button>
+            </div>
+          </div>
+        </div>
+      )}
       {modalImage && (
         <div className="image-modal-overlay" onClick={() => setModalImage(null)}>
           <div className="image-modal-content" onClick={(e) => e.stopPropagation()}>
