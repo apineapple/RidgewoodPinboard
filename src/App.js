@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
+import { Analytics } from "@vercel/analytics/react"
 import cork from './images/cork.png';
 import wood from './images/wood.png';
 import flyerflyer from './images/flyerflyer.png';
@@ -105,121 +106,76 @@ function Board() {
   const pinchRef = useRef({ active: false, startDistance: 0, startTileSize: INITIAL_TILE_SIZE });
   const [hoveredId, setHoveredId] = useState(null);
   const [modalImage, setModalImage] = useState(null);
+  const [pendingUpload, setPendingUpload] = useState(null);
+  const [uploadThanks, setUploadThanks] = useState(false);
   const positionedImages = images.filter((image) => (image.index ?? 0) > 0);
   const isFirstPosterModal = modalImage === firstPoster;
   const CLOUDINARY_CLOUD_NAME = 'vsm8agqa';
   const CLOUDINARY_UPLOAD_PRESET = 'pinboard_upload';
 
-  const openCloudinaryUpload = useCallback(async () => {
+  const openCloudinaryUpload = useCallback(() => {
     if (typeof window === 'undefined') return;
 
-    const loadUploadWidget = () => {
-      const script = document.createElement('script');
-      script.src = 'https://upload-widget.cloudinary.com/global/all.js';
-      script.async = true;
-      script.onload = () => {
-        if (window.cloudinary && typeof window.cloudinary.createUploadWidget === 'function') {
-          const widget = window.cloudinary.createUploadWidget({
-            cloudName: CLOUDINARY_CLOUD_NAME,
-            uploadPreset: CLOUDINARY_UPLOAD_PRESET,
-            sources: ['local'],
-            multiple: false,
-            clientAllowedFormats: ['jpg', 'jpeg', 'png'],
-            maxImageFileSize: 10000000,
-            singleUploadAutoClose: true,
-          }, (error, result) => {
-            if (!error && result && result.event === 'success') {
-              const url = result.info?.secure_url;
-              if (!url) return;
-
-              const img = new Image();
-              img.onload = () => {
-                const scale = 0.2;
-                const w = Math.max(16, Math.round(img.width * scale));
-                const h = Math.max(16, Math.round(img.height * scale));
-                const thumbnailScale = Math.min(1, PIN_WIDTH / w, PIN_HEIGHT / h);
-
-                setImages((prev) => placeImages([...prev, {
-                  src: url,
-                  baseWidth: w * thumbnailScale,
-                  baseHeight: h * thumbnailScale,
-                  rotation: null,
-                  baseX: null,
-                  baseY: null,
-                  noiseX: null,
-                  noiseY: null,
-                  x: null,
-                  y: null,
-                  zIndex: null,
-                  index: prev.length,
-                }]));
-              };
-              img.src = url;
-            }
-
-            if (error) {
-              console.error('Cloudinary upload failed', error);
-            }
-          });
-
-          widget.open();
-          return;
-        }
-        console.error('Cloudinary upload widget failed to load.');
-      };
-      document.body.appendChild(script);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/jpg';
+    input.onchange = (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      setPendingUpload({ file, name: file.name });
     };
-
-    if (window.cloudinary && typeof window.cloudinary.createUploadWidget === 'function') {
-      const widget = window.cloudinary.createUploadWidget({
-        cloudName: CLOUDINARY_CLOUD_NAME,
-        uploadPreset: CLOUDINARY_UPLOAD_PRESET,
-        sources: ['local'],
-        multiple: false,
-        clientAllowedFormats: ['jpg', 'jpeg', 'png'],
-        maxImageFileSize: 10000000,
-        singleUploadAutoClose: true,
-      }, (error, result) => {
-        if (!error && result && result.event === 'success') {
-          const url = result.info?.secure_url;
-          if (!url) return;
-
-          const img = new Image();
-          img.onload = () => {
-            const scale = 0.2;
-            const w = Math.max(16, Math.round(img.width * scale));
-            const h = Math.max(16, Math.round(img.height * scale));
-            const thumbnailScale = Math.min(1, PIN_WIDTH / w, PIN_HEIGHT / h);
-
-            setImages((prev) => placeImages([...prev, {
-              src: url,
-              baseWidth: w * thumbnailScale,
-              baseHeight: h * thumbnailScale,
-              rotation: null,
-              baseX: null,
-              baseY: null,
-              noiseX: null,
-              noiseY: null,
-              x: null,
-              y: null,
-              zIndex: null,
-              index: prev.length,
-            }]));
-          };
-          img.src = url;
-        }
-
-        if (error) {
-          // eslint-disable-next-line no-console
-          console.error('Cloudinary upload failed', error);
-        }
-      });
-      widget.open();
-      return;
-    }
-
-    loadUploadWidget();
+    input.click();
   }, []);
+
+  const confirmUpload = useCallback(async () => {
+    if (!pendingUpload) return;
+
+    const formData = new FormData();
+    formData.append('file', pendingUpload.file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+    try {
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.secure_url) {
+        throw new Error(result.error?.message || 'Upload failed');
+      }
+
+      const url = result.secure_url;
+      const img = new Image();
+      img.onload = () => {
+        const scale = 0.2;
+        const w = Math.max(16, Math.round(img.width * scale));
+        const h = Math.max(16, Math.round(img.height * scale));
+        const thumbnailScale = Math.min(1, PIN_WIDTH / w, PIN_HEIGHT / h);
+
+        setImages((prev) => placeImages([...prev, {
+          src: url,
+          baseWidth: w * thumbnailScale,
+          baseHeight: h * thumbnailScale,
+          rotation: null,
+          baseX: null,
+          baseY: null,
+          noiseX: null,
+          noiseY: null,
+          x: null,
+          y: null,
+          zIndex: null,
+          index: prev.length,
+        }]));
+      };
+      img.src = url;
+      setPendingUpload(null);
+      setUploadThanks(true);
+    } catch (error) {
+      console.error('Cloudinary upload failed', error);
+      setPendingUpload(null);
+    }
+  }, [pendingUpload, CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET]);
 
   const getViewportPosition = useCallback((el, scale = tileSizeRef.current / INITIAL_TILE_SIZE) => ({
     x: (el.scrollLeft + el.clientWidth / 2 - centerRef.current.left) / scale,
@@ -635,6 +591,220 @@ function Board() {
                 />
               </button>
             )}
+          </div>
+        </div>
+      )}
+      {pendingUpload && (
+        <div className="image-modal-overlay" onClick={() => setPendingUpload(null)}>
+          <div
+            className="image-modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '360px',
+              maxWidth: '90vw',
+              padding: '28px 24px',
+              textAlign: 'center',
+              color: '#fff',
+              backgroundRepeat: 'repeat',
+              backgroundSize: `${tileSize}px ${tileSize}px`,
+
+              boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
+            }}
+          >
+            <h3 style={{ margin: '0 0 12px', textAlign: 'left', fontSize: '24px', color: '#030006', backgroundColor: '#f8f3ff' }}>Upload {pendingUpload.name}?</h3>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPendingUpload(null);
+                }}
+                style={{
+                  position: 'relative',
+                  left: '10%',
+                  transform: 'translateX(-50%)',
+                  fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+                  fontWeight: 600,
+                  fontSize: '16px',
+                  textAlign: 'center',
+                  display: 'inline-block',
+                  padding: '9px 16px',
+                  borderRadius: '100px',
+                  border: 'none',
+                  outline: 'none',
+                  zIndex: 0,
+                  color: '#f3f3f3',
+                  cursor: 'pointer',
+                  overflow: 'visible',
+                  backgroundImage: 'linear-gradient(-180deg, #748695 0%, #748695 100%)',
+                  backgroundColor: '#748695 !important',
+                }}
+              >
+                
+                  Cancel
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  confirmUpload();
+                }}
+                style={{
+                  position: 'relative',
+                  left: '18%',
+                  transform: 'translateX(-50%)',
+                  fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+                  fontWeight: 600,
+                  fontSize: '16px',
+                  textAlign: 'center',
+                  color: 'transparent',
+                  display: 'inline-block',
+                  padding: '9px 16px',
+                  borderRadius: '100px',
+                  border: 'none',
+                  zIndex: 0,
+                  backgroundImage: 'linear-gradient(-180deg, #799FD4 0%, #748695 100%)',
+                  boxShadow: '0 5px 2px -3px rgba(14,97,192,0.19), 0 1px 1px 0 rgba(14,97,192,0.19), 0 3px 9px 0 rgba(0,128,161,0.33)',
+                  cursor: 'pointer',
+                  overflow: 'visible',
+                }}
+              >
+                <span
+                  style={{
+                    color: '#f3f3f3',
+                    textShadow: '0 1px 0 rgba(185,224,253,0.4)',
+                    position: 'relative',
+                    zIndex: 3,
+                    display: 'block',
+                    top: '-1px',
+                  }}
+                >
+                  Upload!
+                </span>
+                <span
+                  style={{
+                    content: '" "',
+                    display: 'block',
+                    backgroundImage: 'linear-gradient(-180deg, #ABC9EC 0%, #76A9D7 100%)',
+                    position: 'absolute',
+                    top: '1px',
+                    left: '8px',
+                    right: '8px',
+                    bottom: '50%',
+                    zIndex: 2,
+                    borderRadius: '100px',
+                    pointerEvents: 'none',
+                  }}
+                />
+                <span
+                  style={{
+                    content: '" "',
+                    display: 'block',
+                    position: 'absolute',
+                    zIndex: -1,
+                    top: '1px',
+                    left: '1px',
+                    right: '1px',
+                    bottom: '1px',
+                    borderRadius: '100px',
+                    backgroundImage: 'linear-gradient(-180deg, #689DD3 50%, #BAE3F6 100%)',
+                    boxShadow: 'inset 0 0 1px rgba(42,128,226,0.5), inset 0 0 12px 2px rgba(255,255,255,0.21)',
+                    pointerEvents: 'none',
+                  }}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {uploadThanks && (
+        <div className="image-modal-overlay" onClick={() => setUploadThanks(false)}>
+          <div
+            className="image-modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '360px',
+              maxWidth: '90vw',
+              padding: '28px 24px',
+              textAlign: 'center',
+              color: '#fff',
+              backgroundRepeat: 'repeat',
+              backgroundSize: `${tileSize}px ${tileSize}px`,
+              boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
+            }}
+          >
+            <h3 style={{ margin: '0 0 16px', textAlign: 'left', fontSize: '24px', color: '#030006', backgroundColor: '#f8f3ff' }}>Thanks :) </h3>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setUploadThanks(false);
+                  setModalImage(null);
+                }}
+                style={{
+                  position: 'relative',
+                  fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+                  fontWeight: 600,
+                  fontSize: '16px',
+                  textAlign: 'center',
+                  color: 'transparent',
+                  display: 'inline-block',
+                  padding: '9px 16px',
+                  borderRadius: '100px',
+                  border: 'none',
+                  zIndex: 0,
+                  backgroundImage: 'linear-gradient(-180deg, #799FD4 0%, #748695 100%)',
+                  boxShadow: '0 5px 2px -3px rgba(14,97,192,0.19), 0 1px 1px 0 rgba(14,97,192,0.19), 0 3px 9px 0 rgba(0,128,161,0.33)',
+                  cursor: 'pointer',
+                  overflow: 'visible',
+                }}
+              >
+                <span
+                  style={{
+                    color: '#f3f3f3',
+                    textShadow: '0 1px 0 rgba(185,224,253,0.4)',
+                    position: 'relative',
+                    zIndex: 3,
+                    display: 'block',
+                    top: '-1px',
+                  }}
+                >
+                  Close
+                </span>
+                <span
+                  style={{
+                    content: '" "',
+                    display: 'block',
+                    backgroundImage: 'linear-gradient(-180deg, #ABC9EC 0%, #76A9D7 100%)',
+                    position: 'absolute',
+                    top: '1px',
+                    left: '8px',
+                    right: '8px',
+                    bottom: '50%',
+                    zIndex: 2,
+                    borderRadius: '100px',
+                    pointerEvents: 'none',
+                  }}
+                />
+                <span
+                  style={{
+                    content: '" "',
+                    display: 'block',
+                    position: 'absolute',
+                    zIndex: -1,
+                    top: '1px',
+                    left: '1px',
+                    right: '1px',
+                    bottom: '1px',
+                    borderRadius: '100px',
+                    backgroundImage: 'linear-gradient(-180deg, #689DD3 50%, #BAE3F6 100%)',
+                    boxShadow: 'inset 0 0 1px rgba(42,128,226,0.5), inset 0 0 12px 2px rgba(255,255,255,0.21)',
+                    pointerEvents: 'none',
+                  }}
+                />
+              </button>
+            </div>
           </div>
         </div>
       )}
