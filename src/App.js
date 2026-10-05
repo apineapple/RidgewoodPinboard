@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
-import { Analytics } from "@vercel/analytics/react"
 import cork from './images/cork.png';
 import wood from './images/wood.png';
 import flyerflyer from './images/flyerflyer.png';
@@ -733,14 +732,15 @@ function Board() {
               boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
             }}
           >
-            <h3 style={{ margin: '0 0 16px', textAlign: 'left', fontSize: '24px', color: '#030006', backgroundColor: '#f8f3ff' }}>Thanks :) </h3>
+            <h3 style={{ margin: '0 0 16px', textAlign: 'left', fontSize: '24px', color: '#030006', backgroundColor: '#f8f3ff' }}>Thanks!</h3>
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setUploadThanks(false);
-                  setModalImage(null);
+                setModalImage(null);
+
                 }}
                 style={{
                   position: 'relative',
